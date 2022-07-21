@@ -10,18 +10,29 @@ import { OctreeHelper } from 'https://unpkg.com/three@0.142.0/examples/jsm/helpe
 
 
 
+
+
+
 // variable declaration section
 const WIDTH = window.innerWidth
 const HEIGHT = window.innerHeight
 const STEPS_PER_FRAME = 5
 
-var clock, scene, camera, fillLight1
-var loader, directionalLight, container
+let clock, scene, camera, fillLight1, numAnimations = 0
+let loader, directionalLight, container, mixer, model, skeleton
 
 const GRAVITY = 30;
 
-const playerVelocity = new THREE.Vector3();
-const playerDirection = new THREE.Vector3();
+// const playerVelocity = new THREE.Vector3();
+// const playerDirection = new THREE.Vector3();
+
+let movingForward = false, mousedown = false, movingBackward = false
+
+const cameraAssembly = new THREE.Group();
+const xAxis = new THREE.Vector3(1, 0, 0);
+
+const cameraOrigin = new THREE.Vector3(0, 3.5,0)
+
 
 let playerOnFloor = false;
 
@@ -31,15 +42,28 @@ let mouseTime = 0;
 
 
 
+
+
+
 clock = new THREE.Clock();
 
 scene = new THREE.Scene();
 scene.background = new THREE.Color(0x88ccee);
 scene.fog = new THREE.Fog(0x88ccee, 0, 50);
 
+const axisHelper = new THREE.AxesHelper(5)
+scene.add(axisHelper)
 
 camera = new THREE.PerspectiveCamera(70, WIDTH / HEIGHT, 0.1, 1000)
 camera.rotation.order = "YXZ"
+camera.position.set(0,3,-2)
+// camera.lookAt(cameraOrigin)
+//controls.update() must be called after any manual changes to the camera's transform
+// camera.position.set( 0, 20, 100 );
+
+
+const tempModelVector = new THREE.Vector3(0,0,-1)
+const tempCameraVector = new THREE.Vector3(0,0,-1)
 
 
 fillLight1 = new THREE.HemisphereLight(0x4488bb, 0x002244, 0.5)
@@ -75,6 +99,13 @@ container.appendChild(renderer.domElement);
 
 
 
+const controls = new OrbitControls( camera, renderer.domElement );
+
+
+controls.update();
+
+
+
 loader = new GLTFLoader()
 
 loader.load("./models/shop/shop.gltf", (gltf) => {
@@ -94,156 +125,182 @@ loader.load("./models/shop/shop.gltf", (gltf) => {
     }
   });
 
+
+
+loader.load( 'https://threejs.org/examples/models/gltf/Xbot.glb', function ( gltf ) {
+    model = gltf.scene;
+    gltf.scene.position.set(0,0.1,0)
+    scene.add(model)
+    // container.add(model);
+    
+    model.traverse( function ( object ) {
+      if ( object.isMesh ) {
+        object.castShadow = true;
+      }   
+    });
+    
+    skeleton = new THREE.SkeletonHelper( model );
+    skeleton.visible = false;
+    scene.add( skeleton );
+    
+    const animations = gltf.animations;
+    mixer = new THREE.AnimationMixer( model );
+  
+    let a = animations.length;
+    for ( let i = 0; i < a; ++ i ) {
+      let clip = animations[ i ];
+      const name = clip.name;
+      if ( baseActions[ name ] ) {
+        const action = mixer.clipAction( clip );
+        activateAction( action );
+        baseActions[ name ].action = action;
+        allActions.push( action );
+        numAnimations += 1;
+      }
+    }
+  });
+
+
   const helper = new OctreeHelper(worldOctree);
   helper.visible = false;
   scene.add(helper);
 
-  animate();
+  // animate();
+});
+
+const allActions = [];
+
+const baseActions = {
+  idle: { weight: 1 },
+  walk: { weight: 0 },
+  // run: { weight: 0 }
+};
+
+function activateAction( action ) {
+  const clip = action.getClip();
+  const settings = baseActions[ clip.name ];
+  setWeight( action, settings.weight );
+  action.play();
+}
+
+function setWeight( action, weight ) {
+  action.enabled = true;
+  action.setEffectiveTimeScale( 1 );
+  action.setEffectiveWeight( weight );
+}
+
+window.addEventListener("keydown", (e) => {
+  const { keyCode } = e;
+  console.log(e)
+  if(keyCode === 87 || keyCode === 38) {
+    baseActions.idle.weight = 0;
+    baseActions.walk.weight = 5;   
+    activateAction(baseActions.walk.action);
+    activateAction(baseActions.idle.action);
+    movingForward = true;
+  }
+  if(keyCode === 83 ) {
+    baseActions.idle.weight = 0;
+    baseActions.walk.weight = 5;   
+    activateAction(baseActions.walk.action);
+    activateAction(baseActions.idle.action);
+    movingBackward = true;
+  }
 });
 
 
-document.addEventListener("keydown", (event) => {
-    keyStates[event.code] = true;
-  });
-  
-  document.addEventListener("keyup", (event) => {
-    keyStates[event.code] = false;
-  });
-  
-  container.addEventListener("mousedown", () => {
-    document.body.requestPointerLock();
-  
-    mouseTime = performance.now();
-  });
-  
-  document.addEventListener("mouseup", () => {
-    if (document.pointerLockElement !== null) throwBall();
-  });
-  
-  document.body.addEventListener("mousemove", (event) => {
-    if (document.pointerLockElement === document.body) {
-      camera.rotation.y -= event.movementX / 500;
-      camera.rotation.x -= event.movementY / 500;
-    }
-  });
-  
-
-
-function animate() {
-    const deltaTime = Math.min(0.05, clock.getDelta()) / STEPS_PER_FRAME;
-  
-    // we look for collisions in substeps to mitigate the risk of
-    // an object traversing another too quickly for detection.
-    for (let i = 0; i < STEPS_PER_FRAME; i++) {
-      controls(deltaTime);
-  
-      updatePlayer(deltaTime);
-  
-      teleportPlayerIfOob();
-    }
-  
-    renderer.render(scene, camera);
-  
-    // stats.update();
-  
-    requestAnimationFrame(animate);
+window.addEventListener("keyup", (e) => {
+  const {keyCode} = e;
+  // keycode w
+  if (keyCode === 87 || keyCode === 38) {
+    baseActions.idle.weight = 1;
+    baseActions.walk.weight = 0;
+    activateAction(baseActions.walk.action);
+    activateAction(baseActions.idle.action);
+    movingForward = false;
+}
+if (keyCode === 83 || keyCode === 38) {
+  baseActions.idle.weight = 1;
+  baseActions.walk.weight = 0;
+  activateAction(baseActions.walk.action);
+  activateAction(baseActions.idle.action);
+  movingBackward = false;
 }
 
-
-function controls(deltaTime) {
-    // gives a bit of air control
-    const speedDelta = deltaTime * (playerOnFloor ? 25 : 8);
-  
-    if (keyStates["KeyW"]) {
-      playerVelocity.add(getForwardVector().multiplyScalar(speedDelta));
-    }
-  
-    if (keyStates["KeyS"]) {
-      playerVelocity.add(getForwardVector().multiplyScalar(-speedDelta));
-    }
-  
-    if (keyStates["KeyA"]) {
-      playerVelocity.add(getSideVector().multiplyScalar(-speedDelta));
-    }
-  
-    if (keyStates["KeyD"]) {
-      playerVelocity.add(getSideVector().multiplyScalar(speedDelta));
-    }
-  
-    if (playerOnFloor) {
-      if (keyStates["Space"]) {
-        playerVelocity.y = 15;
-      }
-    }
-}
+})
 
 
-
-function updatePlayer(deltaTime) {
-    let damping = Math.exp(-4 * deltaTime) - 1;
   
-    if (!playerOnFloor) {
-      playerVelocity.y -= GRAVITY * deltaTime;
-  
-      // small air resistance
-      damping *= 0.1;
-    }
-  
-    playerVelocity.addScaledVector(playerVelocity, damping);
-    const deltaPosition = playerVelocity.clone().multiplyScalar(deltaTime);
-    playerCollider.translate(deltaPosition);
-  
-    playerCollisions();
-  
-    camera.position.copy(playerCollider.end);
-}
 
 
-function teleportPlayerIfOob() {
-    if (camera.position.y <= -25) {
-      playerCollider.start.set(0, 0.35, 0);
-      playerCollider.end.set(0, 1, 0);
-      playerCollider.radius = 0.35;
-      camera.position.copy(playerCollider.end);
-      camera.rotation.set(0, 0, 0);
-    }
-}
+const animate = function () {
 
+  
 
-function playerCollisions() {
-    const result = worldOctree.capsuleIntersect(playerCollider);
-    playerOnFloor = false;
-    if (result) {
-      playerOnFloor = result.normal.y > 0;
-      if (!playerOnFloor) {
-        playerVelocity.addScaledVector(
-          result.normal,
-          -result.normal.dot(playerVelocity)
-        );
-      }
-      playerCollider.translate(result.normal.multiplyScalar(result.depth));
-    }
+  requestAnimationFrame( animate );
+
+  controls.update();
+
+  for ( let i = 0; i < numAnimations; i++ ) {
+    const action = allActions[ i ];
+    const clip = action.getClip();
+    const settings = baseActions[clip.name];
+    // settings.weight = action.getEffectiveWeight();
   }
 
-const playerCollider = new Capsule(
-    new THREE.Vector3(0, 0.35, 0),
-    new THREE.Vector3(0, 1, 0),
-    0.35
-);
+  if(mixer) {
+    const mixerUpdateDelta = clock.getDelta();
+    mixer.update( mixerUpdateDelta );
+  }
+  
+  if(movingForward) {
+    // Get the X-Z plane in which camera is looking to move the player
+    cameraAssembly.getWorldDirection(tempCameraVector);
+    const cameraDirection = tempCameraVector.setY(0).normalize();
+    
+    // Get the X-Z plane in which player is looking to compare with camera
+    model.getWorldDirection(tempModelVector);
+    const playerDirection = tempModelVector.setY(0).normalize();
+    model.translateZ(0.06);
+   
+  }
 
-function getForwardVector() {
-    camera.getWorldDirection(playerDirection);
-    playerDirection.y = 0;
-    playerDirection.normalize();
-  
-    return playerDirection;
+  if(movingBackward) {
+    // Get the X-Z plane in which camera is looking to move the player
+    cameraAssembly.getWorldDirection(tempCameraVector);
+    const cameraDirection = tempCameraVector.setY(0).normalize();
+    
+    // Get the X-Z plane in which player is looking to compare with camera
+    model.getWorldDirection(tempModelVector);
+    const playerDirection = tempModelVector.setY(0).normalize();
+    model.translateZ(-0.06);
+   
   }
+
+  renderer.render( scene, camera );
+};
+
+animate()
+
+
+
+// function animate() {
+//     const deltaTime = Math.min(0.05, clock.getDelta()) / STEPS_PER_FRAME;
   
-  function getSideVector() {
-    camera.getWorldDirection(playerDirection);
-    playerDirection.y = 0;
-    playerDirection.normalize();
-    playerDirection.cross(camera.up);
+//     // we look for collisions in substeps to mitigate the risk of
+//     // an object traversing another too quickly for detection.
+//     for (let i = 0; i < STEPS_PER_FRAME; i++) {
+//       controls(deltaTime);
   
-    return playerDirection;
-  }
+//       updatePlayer(deltaTime);
+  
+//       teleportPlayerIfOob();
+//     }
+  
+//     renderer.render(scene, camera);
+  
+//     // stats.update();
+  
+//     requestAnimationFrame(animate);
+// }
+
