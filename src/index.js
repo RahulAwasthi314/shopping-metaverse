@@ -31,7 +31,7 @@ let movingForward = false, mousedown = false, movingBackward = false
 const cameraAssembly = new THREE.Group();
 const xAxis = new THREE.Vector3(1, 0, 0);
 
-const cameraOrigin = new THREE.Vector3(0, 3.5,0)
+const cameraOrigin = new THREE.Vector3(0, 0,0)
 
 
 let playerOnFloor = false;
@@ -55,16 +55,16 @@ const axisHelper = new THREE.AxesHelper(5)
 scene.add(axisHelper)
 
 camera = new THREE.PerspectiveCamera(70, WIDTH / HEIGHT, 0.1, 1000)
-camera.rotation.order = "YXZ"
+// camera.rotation.order = "YXZ"
 camera.position.set(0,3,-2)
-// camera.lookAt(cameraOrigin)
+// camera.lookAt.y = 3
 //controls.update() must be called after any manual changes to the camera's transform
 // camera.position.set( 0, 20, 100 );
 
 
 const tempModelVector = new THREE.Vector3(0,0,-1)
 const tempCameraVector = new THREE.Vector3(0,0,-1)
-
+const playerFacingDirection = new THREE.Vector3()
 
 fillLight1 = new THREE.HemisphereLight(0x4488bb, 0x002244, 0.5)
 fillLight1.position.set(2, 1, 1)
@@ -192,7 +192,7 @@ function setWeight( action, weight ) {
 window.addEventListener("keydown", (e) => {
   const { keyCode } = e;
   console.log(e)
-  if(keyCode === 87 || keyCode === 38) {
+  if(keyCode === 87) {
     baseActions.idle.weight = 0;
     baseActions.walk.weight = 5;   
     activateAction(baseActions.walk.action);
@@ -212,14 +212,14 @@ window.addEventListener("keydown", (e) => {
 window.addEventListener("keyup", (e) => {
   const {keyCode} = e;
   // keycode w
-  if (keyCode === 87 || keyCode === 38) {
+  if (keyCode === 87) {
     baseActions.idle.weight = 1;
     baseActions.walk.weight = 0;
     activateAction(baseActions.walk.action);
     activateAction(baseActions.idle.action);
     movingForward = false;
 }
-if (keyCode === 83 || keyCode === 38) {
+if (keyCode === 83) {
   baseActions.idle.weight = 1;
   baseActions.walk.weight = 0;
   activateAction(baseActions.walk.action);
@@ -239,7 +239,6 @@ const animate = function () {
 
   requestAnimationFrame( animate );
 
-  controls.update();
 
   for ( let i = 0; i < numAnimations; i++ ) {
     const action = allActions[ i ];
@@ -262,6 +261,17 @@ const animate = function () {
     model.getWorldDirection(tempModelVector);
     const playerDirection = tempModelVector.setY(0).normalize();
     model.translateZ(0.06);
+    // camera.translateZ(0.06)
+    cameraAssembly.position.copy(model.position)
+    model.updateMatrixWorld()
+    playerFacingDirection.copy(tempModelVector);
+    playerFacingDirection.applyMatrix4(model.matrixWorld);
+    playerFacingDirection.y = 0;
+    playerFacingDirection.x = 0;
+    playerFacingDirection.z = 0;
+    camera.rotation.set(new THREE.Vector3( 0, Math.PI, 0))
+    playerFacingDirection.normalize();
+    camera.quaternion.setFromUnitVectors(tempCameraVector, playerFacingDirection);
    
   }
 
@@ -274,6 +284,9 @@ const animate = function () {
     model.getWorldDirection(tempModelVector);
     const playerDirection = tempModelVector.setY(0).normalize();
     model.translateZ(-0.06);
+    // camera.translateZ(-0.06);
+    cameraAssembly.position.copy(model.position)
+    model.updateMatrixWorld()
    
   }
 
@@ -281,26 +294,4 @@ const animate = function () {
 };
 
 animate()
-
-
-
-// function animate() {
-//     const deltaTime = Math.min(0.05, clock.getDelta()) / STEPS_PER_FRAME;
-  
-//     // we look for collisions in substeps to mitigate the risk of
-//     // an object traversing another too quickly for detection.
-//     for (let i = 0; i < STEPS_PER_FRAME; i++) {
-//       controls(deltaTime);
-  
-//       updatePlayer(deltaTime);
-  
-//       teleportPlayerIfOob();
-//     }
-  
-//     renderer.render(scene, camera);
-  
-//     // stats.update();
-  
-//     requestAnimationFrame(animate);
-// }
 
