@@ -1,0 +1,15 @@
+{
+  "name": "threejs",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {
+    "http-server": "^14.1.1",
+    "three": "^0.142.0"
+  },
+  "scripts": {
+    "start": "http-server"
+  },
+  "author": "",
+  "license": "ISC"
+}
